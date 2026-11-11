@@ -4,17 +4,34 @@ x_F = 0.500;
 x_D = 0.9983;
 x_B = 0.0010;
 R_D = 0.99264;
-eta_M = 0.453;           % First estimate from the O'Connell overall efficiency.
+mu_L_cP = 0.315023036;   % DWSIM liquid viscosity at 355.371 K, x_F = 0.5.
 efficiencyShift = 0.05;  % Absolute efficiency change for the sensitivity cases.
 
 assert(0 < x_B && x_B < x_F && x_F < x_D && x_D < 1 && R_D > 0, ...
     'Expected 0 < x_B < x_F < x_D < 1 and positive reflux.');
-efficiencies = [eta_M; eta_M-efficiencyShift; eta_M+efficiencyShift; 1];
-assert(all(efficiencies > 0 & efficiencies <= 1), ...
-    'All Murphree efficiencies must be in (0, 1].');
 
 vle = unifacVle();
 yEq = griddedInterpolant(vle(:,1), vle(:,2), 'pchip', 'none');
+
+% Use the three-point geometric average of lecture Example 22.3.
+% Columns: x_A, x_B, y_A, y_B. Top and bottom come from Stage 2 and Stage 28.
+yFeedEq = yEq(x_F);
+phaseCompositions = [
+    0.995797    0.0042034  0.9983    0.00169989;
+    x_F         1-x_F      yFeedEq   1-yFeedEq;
+    0.000995682 0.999004   0.007888  0.992112;
+];
+alphaPoints = (phaseCompositions(:,3)./phaseCompositions(:,1)) ...
+    ./ (phaseCompositions(:,4)./phaseCompositions(:,2));
+alphaMean = prod(alphaPoints)^(1/3);
+eta_0 = 0.492*(mu_L_cP*alphaMean)^(-0.245);
+oconnellTrays = ceil(26/eta_0);
+eta_M = round(eta_0,4);
+efficiencies = [eta_M; eta_M-efficiencyShift; eta_M+efficiencyShift; 1];
+assert(all(efficiencies > 0 & efficiencies <= 1), ...
+    'All Murphree efficiencies must be in (0, 1].');
+fprintf('Relative volatility: top %.6f | feed %.6f | bottom %.6f\n', alphaPoints);
+fprintf('Three-point alpha %.6f | eta_0 %.6f | O''Connell trays %d\n', alphaMean, eta_0, oconnellTrays);
 
 % Saturated liquid feed (q = 1). The operating lines meet at x_F.
 rectSlope = R_D/(R_D+1);
@@ -54,7 +71,7 @@ fig = figure('Name','Murphree McCabe-Thiele', 'NumberTitle','off', ...
     'Color','white','Position',[80 100 1260 640]);
 theme(fig,'light');
 layout = tiledlayout(fig,1,2,'TileSpacing','compact','Padding','compact');
-title(layout, sprintf('Methanol-water at 101.3 kPa | R_D = %.5f | eta_M = %.3f', R_D, eta_M));
+title(layout, sprintf('Methanol-water at 101.3 kPa | R_D = %.5f | eta_M = %.4f', R_D, eta_M));
 ax = nexttile(layout);
 handles = drawDiagram(ax, base, eta_M, x_F, x_D, x_B, yEq, yOp);
 axis(ax,'square');
